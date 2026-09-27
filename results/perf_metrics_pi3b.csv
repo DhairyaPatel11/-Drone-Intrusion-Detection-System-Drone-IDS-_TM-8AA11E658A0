@@ -1,0 +1,18 @@
+metric,value,unit
+host,Linux/aarch64 (raspberrypi),
+python,3.13.5,
+packets,20000,
+warmup,1000,
+elapsed_s,17.8695,s
+throughput_pkts_s,1119.2,pkts/s
+p50_us,889.36,us
+p95_us,1282.67,us
+p99_us,1386.84,us
+mean_us,889.78,us
+cpu_percent,99.43,%
+tracemalloc_active_during_timing,False,
+py_allocator_peak_mb,0.0,MB
+py_allocator_peak_mb_note,steady-state delta measured after warmup; ~0 means no unbounded per-packet growth (use rss_mb for total footprint),
+rss_mb,41.3515625,MB
+scope,offline_synthetic_replay,
+board_hw,TO MEASURE,
