@@ -1,0 +1,473 @@
+# Navigation Attacks Policy (Phase 1)
+# Validated against ids_config.POLICY_SCHEMA at load time.
+# Missing/invalid keys => ConfigError at startup (fail loudly).
+
+# fail-safe: alert_and_pass (never drop flight-critical traffic, only warn)
+fail_mode: alert_and_pass
+
+# Authorized GCS source system ids. Commands from any other sysid are
+# flagged as unauthorized_command_source.
+authorized_sysids: [255]
+
+# Authorized GCS source component ids (MAV_COMP_ID_MISSIONPLANNER=190 by default)
+authorized_compids: [190]
+
+# Per-sysid command flood limits
+rate_limit:
+  commands_per_sec: 20
+
+# ArduPilot Copter mode table (HEARTBEAT custom_mode int -> canonical name)
+modes:
+  0: STABILIZE
+  1: ACRO
+  2: ALT_HOLD
+  3: AUTO
+  4: GUIDED
+  5: LOITER
+  6: RTL
+  7: CIRCLE
+  8: LAND
+  9: DRIFT
+  10: SPORT
+  11: FLIP
+  13: POSHOLD
+  14: BRAKE
+  15: THROW
+  16: AVOID_ADSB
+  17: GUIDED_NOGPS
+  18: SMART_RTL
+  19: FLOWHOLD
+  20: FOLLOW
+  21: ZIGZAG
+  22: SYSTEMID
+  23: AUTOROTATE
+  24: AUTO_RTL
+
+# Per-flight-mode command allowlists (checked ON TOP of the phase tables)
+mode_allowed_commands:
+  STABILIZE: [COMPONENT_ARM_DISARM, DO_SET_MODE]
+  ACRO: [DO_SET_MODE]
+  ALT_HOLD: [DO_SET_MODE]
+  AUTO: [DO_SET_MODE]
+  GUIDED:
+    [NAV_TAKEOFF, NAV_LAND, NAV_WAYPOINT, NAV_LOITER_UNLIM,
+     NAV_RETURN_TO_LAUNCH, DO_SET_MODE, PARAM_SET]
+  LOITER: [NAV_WAYPOINT, DO_SET_MODE]
+  RTL: [DO_SET_MODE]
+  LAND: [DO_SET_MODE]
+  SMART_RTL: [DO_SET_MODE]
+  AUTO_RTL: [DO_SET_MODE]
+
+# Legal mode-to-mode transitions (enforced only if enforce_mode_transitions=true)
+mode_transitions:
+  STABILIZE:
+    [ACRO, ALT_HOLD, AUTO, GUIDED, LOITER, RTL, CIRCLE, LAND, DRIFT, SPORT,
+     FLIP, POSHOLD, BRAKE, THROW, AVOID_ADSB, GUIDED_NOGPS, SMART_RTL,
+     FLOWHOLD, FOLLOW, ZIGZAG, SYSTEMID, AUTOROTATE, AUTO_RTL]
+  ACRO: [STABILIZE, ALT_HOLD, AUTO, GUIDED, LOITER, RTL]
+  ALT_HOLD: [STABILIZE, ACRO, AUTO, GUIDED, LOITER, RTL, LAND]
+  AUTO: [STABILIZE, GUIDED, LOITER, RTL, LAND]
+  GUIDED: [STABILIZE, ALT_HOLD, AUTO, LOITER, RTL, LAND]
+  LOITER: [STABILIZE, ALT_HOLD, AUTO, GUIDED, RTL, LAND]
+  RTL: [STABILIZE, ALT_HOLD, AUTO, GUIDED, LOITER, LAND]
+  LAND: [STABILIZE, ALT_HOLD, AUTO, GUIDED, LOITER, RTL]
+  SMART_RTL: [STABILIZE, GUIDED, LOITER, RTL]
+  AUTO_RTL: [AUTO, GUIDED, LAND]
+
+enforce_mode_transitions: false
+
+# Per-command parameter bounds (validate values, not just ids)
+command_params:
+  COMPONENT_ARM_DISARM:
+    param1: {enum: [0, 1]}
+  NAV_TAKEOFF:
+    param1: {min: -15.0, max: 45.0}      # pitch (deg)
+    param7: {min: 0.5, max: 120.0}       # takeoff altitude (m)
+  NAV_LAND:
+    param7: {min: 0.0, max: 60.0}        # abort altitude (m)
+  NAV_RETURN_TO_LAUNCH: {}
+  NAV_LOITER_UNLIM: {}
+  NAV_WAYPOINT:
+    param1: {min: 0.0, max: 3600.0}      # hold time (s)
+    param2: {min: 0.0, max: 100.0}       # accept radius (m)
+  DO_SET_MODE:
+    param1: {mode: true}                 # must be a valid ArduPilot mode
+
+# Geofence: any coordinate/altitude outside is flagged
+geofence:
+  lat_min: -90.0
+  lat_max: 90.0
+  lon_min: -180.0
+  lon_max: 180.0
+  alt_min: -50.0
+  alt_max: 5000.0
+
+# PARAM_SET allow-list (empty = deny mid-flight)
+param_set_rules:
+  ANGLE_MAX: {min: 100.0, max: 4500.0}
+  ATC_RATE_RP_P: {min: 0.001, max: 1.0}
+  WPNAV_SPEED: {min: 100.0, max: 2000.0}
+  RTL_ALT: {min: 0.0, max: 1000.0}
+
+mission:
+  max_items: 32767
+  min_waypoint_sep_m: 0.0
+
+ack:
+  timeout_s: 3.0
+
+signing:
+  require: false                       # true = flag unsigned frames
+  verify_when_present: false           # true = verify signature if key set
+  timestamp_tolerance_s: 30.0
+
+# Phase 3 — cyber-physical fusion checks (pluggable, per-check thresholds).
+# Each check cross-references the latest telemetry snapshot; thresholds must
+# be tuned per platform (SITL defaults here, validated in Phase 5/6).
+physical:
+  enabled: true
+  max_telemetry_age_s: 5.0             # stale telemetry => physical checks skip
+  checks:
+    disarm_vs_airborne:
+      enabled: true
+      max_disarm_alt_m: 0.5            # DISARM only near the ground
+      max_disarm_climb_ms: 0.5
+    takeoff_vs_flying:
+      enabled: true
+      min_takeoff_alt_m: 1.0           # NAV_TAKEOFF only from low altitude
+    waypoint_teleport:
+      enabled: true
+      max_step_m: 500.0                # max per-command horizontal step
+      max_alt_step_m: 50.0
+    altitude_teleport:
+      enabled: true
+      max_alt_step_m: 50.0             # commanded alt vs baro/GPS delta
+
+# Phase 4 — alerting
+alerting:
+  rate_limit_per_sec: 10              # max alerts per second
+  dedupe_window_s: 30.0               # suppress duplicate alerts within window
+  include_mitre: true                 # include MITRE ATT&CK for ICS tags
+
+# MAV_CMD int ids for the canonical command names used in this policy
+command_ids:
+  COMPONENT_ARM_DISARM: 400
+  NAV_TAKEOFF: 22
+  NAV_LAND: 21
+  NAV_RETURN_TO_LAUNCH: 20
+  DO_SET_MODE: 183
+  NAV_WAYPOINT: 16
+  NAV_LOITER_UNLIM: 17
+
+# Flight states and which MAVLink commands are legal in each.
+# transitions_to is informational + sanity-checked (must reference real
+# states). Ground-truth state changes still come ONLY from telemetry.
+states:
+  DISARMED:
+    allowed_commands: [COMPONENT_ARM_DISARM]
+    transitions_to: [ARMED]
+  ARMED:
+    allowed_commands: [NAV_TAKEOFF, NAV_LOITER_UNLIM, DO_SET_MODE]
+    transitions_to: [TAKING_OFF, DISARMED]
+  TAKING_OFF:
+    allowed_commands: [DO_SET_MODE]
+    transitions_to: [FLYING, LANDING]
+  FLYING:
+    allowed_commands:
+      [NAV_LAND, NAV_RETURN_TO_LAUNCH, NAV_LOITER_UNLIM, DO_SET_MODE,
+       NAV_WAYPOINT, PARAM_SET]
+    transitions_to: [LANDING, RETURNING, DISARMED]
+  LANDING:
+    allowed_commands: [DO_SET_MODE]
+    transitions_to: [DISARMED, ARMED]
+  RETURNING:
+    allowed_commands: [DO_SET_MODE]
+    transitions_to: [LANDING, FLYING, DISARMED]
+
+# Per-mission-profile overrides. Each profile deep-merges over the base
+# policy above (e.g. a delivery profile may also allow NAV_LAND in LANDING,
+# a survey profile may disallow PARAM_SET mid-flight).
+mission_profiles: {}
+
+# ==================== FIRMWARE ATTACKS (Phase 0-1) ====================
+firmware:
+  # Approved firmware identifiers (version string as reported by AUTOPILOT_VERSION)
+  approved_versions:
+    - "Copter-4.5.0"
+    - "Copter-4.4.4"
+  # Approved ArduPilot git commit hashes (7+ chars; match prefix)
+  approved_git_hashes:
+    - "a1b2c3d"    # example: replace with actual release tags
+  # Reject any version/hash older than the minimum approved (downgrade detection)
+  reject_downgrade: true
+
+  # Parameter names/prefixes that are safety-critical; mid-flight changes
+  # outside allowed window trigger alerts
+  protected_param_prefixes:
+    - "ARMING_"
+    - "EKF2_"
+    - "EKF3_"
+    - "BATT_"
+    - "FS_"
+    - "GPS_"
+    - "INS_"
+    - "RTL_"
+    - "WPNAV_"
+    - "ANGLE_"
+    - "ATC_"
+
+  # MAVLink FILE_TRANSFER_PROTOCOL (FTP) monitoring
+  protected_ftp_paths:
+    - "/APM/scripts/"
+    - "/etc/"
+    - "/APM/params/"
+    - "/APM/firmware/"
+  # Paths where writes are allowed during flight (e.g., logs)
+  allowed_ftp_paths:
+    - "/logs/"
+    - "/APM/logs/"
+  max_ftp_block_size: 512          # bytes per block; oversized = alert
+  max_ftp_file_size: 1048576       # bytes per file; oversized = alert
+
+  # Update workflow guard
+  update_window:
+    require_disarmed: true
+    require_ground: true
+    allowed_states: ["DISARMED"]
+
+  # Reboot / bootloader rules
+  reboot_rules:
+    allow_bootloader_reboot_armed: false
+    allow_bootloader_reboot_disarmed: true
+    unexpected_bootcount_threshold: 1    # allow N unexpected increments
+    max_uptime_jump_s: 60.0              # uptime jump > this = alert
+
+# --- Companion-side integrity (hash + signature verification) ---
+companion_integrity:
+  enabled: true
+  manifest_path: "/etc/drone-ids/firmware_manifest.json"
+  watch_dirs:
+    - "/opt/ardupilot/"
+    - "/etc/ardupilot/"
+    - "/home/pi/firmware/"
+  hash_algorithm: "sha256"
+  max_worker_cpu_percent: 10
+  verify_on_update_only: true
+
+# --- Behavioral baseline (cyber-physical fingerprint) ---
+# WARNING: indicates suspected tampering, NOT proof.
+# Requires benign training data collection first.
+behavioral_baseline:
+  enabled: false
+  min_samples: 1000
+  drift_threshold_std: 5.0
+  features: ["attitude_vs_command", "motor_vs_throttle", "telemetry_rate_jitter", "pid_response"]
+  retrain_on_version_change: true
+
+# ==================== CONTROL SYSTEM ATTACKS (Phase 1) ====================
+control_system:
+  enabled: true
+  sensor_consistency:
+    enabled: true
+    max_age_s: 2.0
+    gps_vs_imu:
+      enabled: true
+      max_pos_drift_m: 5.0
+      max_vel_drift_ms: 1.0
+      max_yaw_drift_deg: 10.0
+    baro_vs_gps_alt:
+      enabled: true
+      max_diff_m: 10.0
+    optflow_vs_imu:
+      enabled: true
+      max_vel_diff_ms: 1.0
+      min_quality: 50
+    mag_vs_cog:
+      enabled: true
+      max_yaw_diff_deg: 30.0
+      min_gps_speed_ms: 2.0
+    dist_sensor_vs_alt:
+      enabled: true
+      max_diff_m: 2.0
+  estimator_health:
+    enabled: true
+    max_age_s: 1.0
+    innovation:
+      enabled: true
+      chi2_threshold: 100.0
+      cusum_threshold: 5.0
+      window_size: 50
+    variance:
+      enabled: true
+      max_pos_horiz_var: 25.0
+      max_pos_vert_var: 10.0
+      max_vel_var: 4.0
+  control_invariant:
+    enabled: true
+    max_age_s: 1.0
+    attitude:
+      enabled: true
+      max_roll_err_deg: 10.0
+      max_pitch_err_deg: 10.0
+      max_yaw_err_deg: 15.0
+    position:
+      enabled: true
+      max_pos_err_m: 5.0
+      max_vel_err_ms: 1.0
+    actuator:
+      enabled: true
+      max_pwm_residual_us: 200
+      saturation_margin_us: 100
+  actuator_anomaly:
+    enabled: true
+    max_age_s: 1.0
+    asymmetry:
+      enabled: true
+      max_asymmetry_ratio: 0.3
+    oscillation:
+      enabled: true
+      max_freq_hz: 20.0
+      min_amplitude_us: 50
+      window_size: 50
+    gyro_resonance:
+      enabled: true
+      peak_freq_hz: 400.0
+      freq_tolerance_hz: 50.0
+      min_power_db: -10.0
+      window_size: 200
+  param_tampering:
+    enabled: true
+    critical_params: ["ATC_RAT_RLL_P", "ATC_RAT_PIT_P", "ATC_RAT_YAW_P",
+                      "WPNAV_SPEED", "WPNAV_ACCEL", "RTL_ALT", "FS_GCS_ENABLE",
+                      "ARMING_CHECK", "BRD_SAFETYENABLE"]
+    allow_in_flight: false
+    value_bounds:
+      ATC_RAT_RLL_P: {min: 0.001, max: 1.0}
+      ATC_RAT_PIT_P: {min: 0.001, max: 1.0}
+      ATC_RAT_YAW_P: {min: 0.001, max: 1.0}
+      WPNAV_SPEED: {min: 100.0, max: 2000.0}
+      WPNAV_ACCEL: {min: 50.0, max: 500.0}
+      RTL_ALT: {min: 0.0, max: 1000.0}
+      FS_GCS_ENABLE: {min: 0.0, max: 2.0}
+      ARMING_CHECK: {min: 0.0, max: 65535.0}
+      BRD_SAFETYENABLE: {min: 0.0, max: 1.0}
+  failsafe_logic:
+    enabled: true
+    max_age_s: 2.0
+    parachute_min_alt_m: 50.0
+    engine_kill_requires_armed: true
+    geofence_action: rtl
+  fusion:
+    sensor_consistency_weight: 0.3
+    estimator_health_weight: 0.2
+    control_invariant_weight: 0.25
+    actuator_anomaly_weight: 0.15
+    param_tampering_weight: 0.05
+    failsafe_logic_weight: 0.05
+    alert_threshold: 0.5
+  advisory:
+    enabled: false
+    auto_failsafe: false
+    sensor_to_distrust: []
+    recommended_mode: null
+
+# ==================== NAVIGATION ATTACKS (Phase 1) ====================
+navigation:
+  enabled: true
+  # GNSS quality features
+  gnss_quality:
+    enabled: true
+    min_satellites: 5
+    max_hdop: 3.0
+    max_epv: 5.0
+    snr_spread_threshold_db: 15.0
+    snr_change_rate_db_s: 10.0
+    fix_type_change_alert: true
+    position_jump_threshold_m: 10.0
+    velocity_jump_threshold_ms: 5.0
+    clock_jump_threshold_s: 1.0
+    spoof_flag_weight: 1.0
+    jam_flag_weight: 1.0
+  # INS/GNSS consistency
+  ins_gnss_consistency:
+    enabled: true
+    innovation_chi2_threshold: 100.0
+    cusum_threshold: 5.0
+    cusum_window: 50
+    widen_during_maneuver: true
+    yaw_rate_threshold_deg_s: 30.0
+    accel_threshold_ms2: 3.0
+    drift_allowance: 0.5
+  # Bounded dead reckoning
+  dead_reckoning:
+    enabled: true
+    max_uncertainty_m: 50.0
+    uncertainty_growth_ms: 0.5
+    re_anchor_trust_threshold: 0.7
+  # Multi-source attribution
+  multi_source_attribution:
+    enabled: true
+    min_sources_for_attribution: 3
+    source_weights:
+      gnss: 1.0
+      ins: 0.9
+      baro: 0.8
+      optflow: 0.7
+      magnetometer: 0.7
+      wind_airspeed: 0.6
+  # Sensor-level cross-checks
+  sensor_cross_checks:
+    enabled: true
+    mag_vs_gyro_heading:
+      enabled: true
+      max_yaw_diff_deg: 30.0
+      min_gps_speed_ms: 2.0
+    baro_vs_gnss_alt:
+      enabled: true
+      max_diff_m: 10.0
+      weather_drift_allowance_m: 2.0
+    optflow_vs_gnss_vel:
+      enabled: true
+      max_vel_diff_ms: 1.0
+      wind_allowance_ms: 2.0
+      min_quality: 50
+  # Stealthy attack analysis
+  stealthy_analysis:
+    enabled: true
+    detection_floor:
+      max_undetected_drift_rate_ms: 0.1
+      max_undetected_bias_m: 5.0
+  # Trust and advisory response
+  trust:
+    enabled: true
+    hysteresis: 0.1
+    initial_trust: 1.0
+    min_trust_for_re_anchor: 0.7
+
+# Per-mission-profile overrides (deep-merge over base)
+mission_profiles:
+  # High-value asset transport: tighter navigation thresholds
+  high_value:
+    navigation:
+      gnss_quality:
+        min_satellites: 8
+        max_hdop: 2.0
+        max_epv: 3.0
+      ins_gnss_consistency:
+        cusum_threshold: 3.0
+      trust:
+        min_trust_for_re_anchor: 0.8
+  # GPS-denied environment: rely more on INS/optflow
+  gps_denied:
+    navigation:
+      ins_gnss_consistency:
+        enabled: false
+      multi_source_attribution:
+        source_weights:
+          gnss: 0.3
+          ins: 1.0
+          baro: 0.9
+          optflow: 1.0
+          magnetometer: 0.8
+      dead_reckoning:
+        max_uncertainty_m: 100.0

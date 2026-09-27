@@ -1,0 +1,52 @@
+# ============================================================
+# ArduPilot SITL Parameter File — Drone IDS Hardened Config
+# Frame: Quadcopter (+) | MAVLink 2.0 + Signing | Failsafes
+# ============================================================
+
+# ---- MAVLink 2.0 & Message Signing ----
+# SERIAL1_PROTOCOL=2  → Use MAVLink 2.0 on serial port 1 (telemetry)
+#                       Required for native signing support.
+SERIAL1_PROTOCOL 2
+
+# MAV1_OPTIONS=1      → Bitmask for MAVLink 1 compatibility options.
+#                       Bit 0 (value 1) = "Enable MAVLink 2.0 signing".
+#                       This activates message signing on the link.
+MAV1_OPTIONS 1
+
+# ---- GCS Restriction ----
+# MAV_GCS_SYSID=255   → Only accept commands from GCS with system ID 255.
+#                       Blocks spoofed/injected commands from other sysids.
+#                       255 is conventionally reserved for "ground station".
+MAV_GCS_SYSID 255
+
+# ---- EKF Failsafe on GPS Glitch ----
+# FS_EKF_THRESH=0.8   → EKF innovation threshold (0.0–1.0).
+#                       0.8 = moderately sensitive; triggers when GPS
+#                       innovations exceed 80% of expected variance.
+FS_EKF_THRESH 0.8
+
+# FS_EKF_ACTION=1     → Action on EKF failsafe: 1 = Land mode.
+#                       (0=Disabled, 1=Land, 2=RTL, 3=SmartRTL)
+FS_EKF_ACTION 1
+
+# ---- Dead-Reckoning Fallback ----
+# FS_DR_ENABLE=1      → Enable Dead Reckoning (DR) fallback.
+#                       If GPS/EKF fails, DR uses IMU + optical flow
+#                       (or pure inertial) to estimate position.
+FS_DR_ENABLE 1
+
+# ---- GCS Failsafe ----
+# FS_GCS_ENABLE=1     → Enable Ground Control Station failsafe.
+#                       If no MAVLink heartbeat from GCS for
+#                       FS_GCS_TIMEOUT ms (default 5000), trigger action.
+FS_GCS_ENABLE 1
+
+# ============================================================
+# Recommended complementary params (uncomment to use)
+# ============================================================
+# FS_GCS_TIMEOUT 5000     # GCS timeout in ms (default 5000)
+# FS_EKF_THRESH 0.8       # Already set above
+# EK2_GPS_CHECK 3         # EKF2 GPS check level (3 = strict)
+# EK2_GPS_TYPE 3          # Use GPS for EKF2 (3 = use if available)
+# BRD_SAFETYENABLE 1      # Enable safety switch (if hardware present)
+# ============================================================

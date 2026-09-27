@@ -1,0 +1,15 @@
+# Normalize line endings in the repository, check them out per-platform.
+* text=auto eol=lf
+
+# Windows-only
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.parm text eol=crlf
+
+# Binary / must-never-be-mangled
+*.png binary
+*.jpg binary
+*.gif binary
+*.pdf binary
+*.docx binary
+*.parm.bak binary

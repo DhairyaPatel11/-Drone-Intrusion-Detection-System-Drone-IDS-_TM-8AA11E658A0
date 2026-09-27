@@ -1,0 +1,288 @@
+# Firmware Attacks Policy (Phase 0-1)
+# ----------------------------------------------------------
+# All firmware-attack detection rules live here. The schema is
+# defined in ids_config.POLICY_SCHEMA (see 'firmware', 'companion_integrity',
+# 'behavioral_baseline' sections). This file is loaded by the same
+# load_config() and validated identically to the command-injection policy.
+# ----------------------------------------------------------
+
+fail_mode: "alert_and_pass"   # alert_and_pass | alert_and_block
+
+# --- Flight-state & command policy (shared with command injection) ---
+states:
+  DISARMED:
+    allowed_commands: ["COMPONENT_ARM_DISARM"]
+    transitions_to: ["ARMED"]
+  ARMED:
+    allowed_commands: ["NAV_TAKEOFF", "NAV_LOITER_UNLIM", "DO_SET_MODE"]
+    transitions_to: ["TAKING_OFF", "DISARMED"]
+  TAKING_OFF:
+    allowed_commands: ["DO_SET_MODE"]
+    transitions_to: ["FLYING", "LANDING"]
+  FLYING:
+    allowed_commands: ["NAV_LAND", "NAV_RETURN_TO_LAUNCH", "NAV_LOITER_UNLIM",
+                       "DO_SET_MODE", "NAV_WAYPOINT", "PARAM_SET"]
+    transitions_to: ["LANDING", "RETURNING", "DISARMED"]
+  LANDING:
+    allowed_commands: ["DO_SET_MODE"]
+    transitions_to: ["DISARMED", "ARMED"]
+  RETURNING:
+    allowed_commands: ["DO_SET_MODE"]
+    transitions_to: ["LANDING", "FLYING", "DISARMED"]
+
+rate_limit:
+  commands_per_sec: 20
+
+authorized_sysids: [255]
+authorized_compids: [190]
+
+# ArduPilot mode table (custom_mode int -> canonical name)
+modes:
+  0: "STABILIZE"
+  1: "ACRO"
+  2: "ALT_HOLD"
+  3: "AUTO"
+  4: "GUIDED"
+  5: "LOITER"
+  6: "RTL"
+  7: "CIRCLE"
+  8: "LAND"
+  9: "DRIFT"
+  10: "SPORT"
+  11: "FLIP"
+  13: "POSHOLD"
+  14: "BRAKE"
+  15: "THROW"
+  16: "AVOID_ADSB"
+  17: "GUIDED_NOGPS"
+  18: "SMART_RTL"
+  19: "FLOWHOLD"
+  20: "FOLLOW"
+  21: "ZIGZAG"
+  22: "SYSTEMID"
+  23: "AUTOROTATE"
+  24: "AUTO_RTL"
+
+# Per-flight-mode command allowlists
+mode_allowed_commands:
+  STABILIZE: ["COMPONENT_ARM_DISARM", "DO_SET_MODE"]
+  ACRO: ["DO_SET_MODE"]
+  ALT_HOLD: ["DO_SET_MODE"]
+  AUTO: ["DO_SET_MODE"]
+  GUIDED: ["NAV_TAKEOFF", "NAV_LAND", "NAV_WAYPOINT",
+           "NAV_LOITER_UNLIM", "NAV_RETURN_TO_LAUNCH",
+           "DO_SET_MODE", "PARAM_SET"]
+  LOITER: ["NAV_WAYPOINT", "DO_SET_MODE"]
+  RTL: ["DO_SET_MODE"]
+  LAND: ["DO_SET_MODE"]
+  SMART_RTL: ["DO_SET_MODE"]
+  AUTO_RTL: ["DO_SET_MODE"]
+
+# Legal ArduPilot mode-to-mode transitions
+mode_transitions:
+  STABILIZE: ["ACRO", "ALT_HOLD", "AUTO", "GUIDED", "LOITER",
+              "RTL", "CIRCLE", "LAND", "DRIFT", "SPORT", "FLIP",
+              "POSHOLD", "BRAKE", "THROW", "AVOID_ADSB",
+              "GUIDED_NOGPS", "SMART_RTL", "FLOWHOLD", "FOLLOW",
+              "ZIGZAG", "SYSTEMID", "AUTOROTATE", "AUTO_RTL"]
+  ACRO: ["STABILIZE", "ALT_HOLD", "AUTO", "GUIDED", "LOITER", "RTL"]
+  ALT_HOLD: ["STABILIZE", "ACRO", "AUTO", "GUIDED", "LOITER", "RTL", "LAND"]
+  AUTO: ["STABILIZE", "GUIDED", "LOITER", "RTL", "LAND"]
+  GUIDED: ["STABILIZE", "ALT_HOLD", "AUTO", "LOITER", "RTL", "LAND"]
+  LOITER: ["STABILIZE", "ALT_HOLD", "AUTO", "GUIDED", "RTL", "LAND"]
+  RTL: ["STABILIZE", "ALT_HOLD", "AUTO", "GUIDED", "LOITER", "LAND"]
+  LAND: ["STABILIZE", "ALT_HOLD", "AUTO", "GUIDED", "LOITER", "RTL"]
+  SMART_RTL: ["STABILIZE", "GUIDED", "LOITER", "RTL"]
+  AUTO_RTL: ["AUTO", "GUIDED", "LAND"]
+
+enforce_mode_transitions: false
+
+# Per-command parameter bounds
+command_params:
+  COMPONENT_ARM_DISARM:
+    param1: {enum: [0, 1]}
+  NAV_TAKEOFF:
+    param1: {min: -15.0, max: 45.0}
+    param7: {min: 0.5, max: 120.0}
+  NAV_LAND:
+    param7: {min: 0.0, max: 60.0}
+  NAV_RETURN_TO_LAUNCH: {}
+  NAV_LOITER_UNLIM: {}
+  NAV_WAYPOINT:
+    param1: {min: 0.0, max: 3600.0}
+    param2: {min: 0.0, max: 100.0}
+  DO_SET_MODE:
+    param1: {mode: true}
+
+geofence:
+  lat_min: -90.0
+  lat_max: 90.0
+  lon_min: -180.0
+  lon_max: 180.0
+  alt_min: -50.0
+  alt_max: 5000.0
+
+# PARAM_SET allow-list (empty = deny mid-flight)
+param_set_rules:
+  ANGLE_MAX: {min: 100.0, max: 4500.0}
+  ATC_RATE_RP_P: {min: 0.001, max: 1.0}
+  WPNAV_SPEED: {min: 100.0, max: 2000.0}
+  RTL_ALT: {min: 0.0, max: 1000.0}
+
+mission:
+  max_items: 32767
+  min_waypoint_sep_m: 0.0
+
+ack:
+  timeout_s: 3.0
+
+signing:
+  require: false
+  verify_when_present: false
+  timestamp_tolerance_s: 30.0
+
+# Phase 3 — cyber-physical fusion (plugable + thresholds)
+physical:
+  enabled: true
+  max_telemetry_age_s: 5.0
+  checks:
+    disarm_vs_airborne:
+      enabled: true
+      max_disarm_alt_m: 0.5
+      max_disarm_climb_ms: 0.5
+    takeoff_vs_flying:
+      enabled: true
+      min_takeoff_alt_m: 1.0
+    waypoint_teleport:
+      enabled: true
+      max_step_m: 500.0
+      max_alt_step_m: 50.0
+    altitude_teleport:
+      enabled: true
+      max_alt_step_m: 50.0
+
+command_ids:
+  COMPONENT_ARM_DISARM: 400
+  NAV_TAKEOFF: 22
+  NAV_LAND: 21
+  NAV_RETURN_TO_LAUNCH: 20
+  DO_SET_MODE: 183
+  NAV_WAYPOINT: 16
+  NAV_LOITER_UNLIM: 17
+
+alerting:
+  rate_limit_per_sec: 10
+  dedupe_window_s: 30.0
+  include_mitre: true
+
+# ============================================================
+# FIRMWARE ATTACKS — new sections
+# ============================================================
+firmware:
+  # Approved firmware identifiers (version string as reported by AUTOPILOT_VERSION)
+  approved_versions:
+    - "Copter-4.5.0"
+    - "Copter-4.4.4"
+  # Approved ArduPilot git commit hashes (7+ chars; match prefix)
+  approved_git_hashes:
+    - "a1b2c3d"    # example: replace with actual release tags
+  # Reject any version/hash older than the minimum approved (downgrade detection)
+  reject_downgrade: true
+
+  # Parameter names/prefixes that are safety-critical; mid-flight changes
+  # outside allowed window trigger alerts
+  protected_param_prefixes:
+    - "ARMING_"
+    - "EKF2_"
+    - "EKF3_"
+    - "BATT_"
+    - "FS_"
+    - "GPS_"
+    - "INS_"
+    - "RTL_"
+    - "WPNAV_"
+    - "ANGLE_"
+    - "ATC_"
+
+  # MAVLink FILE_TRANSFER_PROTOCOL (FTP) monitoring
+  protected_ftp_paths:
+    - "/APM/scripts/"
+    - "/etc/"
+    - "/APM/params/"
+    - "/APM/firmware/"
+  # Paths where writes are allowed during flight (e.g., logs)
+  allowed_ftp_paths:
+    - "/logs/"
+    - "/APM/logs/"
+  max_ftp_block_size: 512          # bytes per block; oversized = alert
+  max_ftp_file_size: 1048576       # bytes per file; oversized = alert
+
+  # Update workflow guard
+  update_window:
+    require_disarmed: true
+    require_ground: true
+    allowed_states: ["DISARMED"]
+
+  # Reboot / bootloader rules
+  reboot_rules:
+    allow_bootloader_reboot_armed: false
+    allow_bootloader_reboot_disarmed: true
+    unexpected_bootcount_threshold: 1    # allow N unexpected increments
+    max_uptime_jump_s: 60.0              # uptime jump > this = alert
+
+# --- Companion-side integrity (hash + signature verification) ---
+companion_integrity:
+  enabled: true
+  manifest_path: "/etc/drone-ids/firmware_manifest.json"
+  watch_dirs:
+    - "/opt/ardupilot/"
+    - "/etc/ardupilot/"
+    - "/home/pi/firmware/"
+  hash_algorithm: "sha256"
+  max_worker_cpu_percent: 10
+  verify_on_update_only: true
+
+# --- Behavioral baseline (cyber-physical fingerprint) ---
+# WARNING: indicates suspected tampering, NOT proof.
+# Requires benign training data collection first.
+behavioral_baseline:
+  enabled: false
+  min_samples: 1000
+  drift_threshold_std: 5.0
+  features:
+    - "attitude_vs_command"
+    - "motor_vs_throttle"
+    - "telemetry_rate_jitter"
+    - "pid_response"
+  retrain_on_version_change: true
+
+# --- Per-mission-profile overrides (same mechanism as command injection) ---
+mission_profiles:
+  # Example: tighter limits for high-value asset transport
+  high_value:
+    firmware:
+      update_window:
+        require_disarmed: true
+        require_ground: true
+        allowed_states: ["DISARMED"]
+      reboot_rules:
+        allow_bootloader_reboot_disarmed: false
+      protected_param_prefixes:
+        - "ARMING_"
+        - "EKF2_"
+        - "EKF3_"
+        - "BATT_"
+        - "FS_"
+        - "GPS_"
+        - "INS_"
+        - "RTL_"
+        - "WPNAV_"
+        - "ANGLE_"
+        - "ATC_"
+        - "SERVO_"
+        - "RC_"
+    companion_integrity:
+      verify_on_update_only: false
+    behavioral_baseline:
+      enabled: true
+      drift_threshold_std: 3.0

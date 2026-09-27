@@ -1,0 +1,49 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Drone IDS — 9-Stage MAVLink Pipeline",
+    "subtitle": "Companion Computer (RPi 3B+ / Jetson Nano)",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "locale": "en"
+  },
+  "lanes": [
+    { "id": "input", "label": "Input" },
+    { "id": "comm", "label": "Comm L0-L3" },
+    { "id": "firmware", "label": "Firmware L4-L6" },
+    { "id": "fusion", "label": "Fusion L7-L8" },
+    { "id": "output", "label": "Alerting" },
+    { "id": "config", "label": "Config" }
+  ],
+  "mainPath": ["fc", "mavlink", "pipeline", "limiter", "alert"],
+  "nodes": [
+    { "id": "fc", "lane": "input", "col": 0, "type": "external", "label": "Flight Ctrl", "sublabel": "ArduPilot 4.5+" },
+    { "id": "mavlink", "lane": "input", "col": 1, "type": "messagebus", "label": "MAVLink Stream", "sublabel": "UDP/Serial 10-100 Hz" },
+    { "id": "gcs", "lane": "input", "col": 2, "type": "external", "label": "GCS", "sublabel": "MAVLink 2.0" },
+    { "id": "pipeline", "lane": "input", "col": 3, "type": "backend", "label": "IDSPipeline", "sublabel": "9-stage orchestrator" },
+    { "id": "comm", "lane": "comm", "col": 2, "type": "security", "label": "Comm L0-L3", "sublabel": "CRC Replay CmdInj RF" },
+    { "id": "firmware", "lane": "firmware", "col": 2, "type": "backend", "label": "Firmware L4-L6", "sublabel": "FTP Version Integrity" },
+    { "id": "ctrlsys", "lane": "fusion", "col": 3, "type": "backend", "label": "Ctrl Sys L7", "sublabel": "6 det weighted fusion" },
+    { "id": "nav", "lane": "fusion", "col": 4, "type": "backend", "label": "Navigation L8", "sublabel": "18 det trust hyst" },
+    { "id": "limiter", "lane": "output", "col": 4, "width": 120, "type": "security", "label": "RateLimiter", "sublabel": "Dedup + limit" },
+    { "id": "alert", "lane": "output", "col": 5, "type": "security", "label": "IDSAlert", "sublabel": "attack_class MITRE" },
+    { "id": "config", "lane": "config", "col": 5, "type": "database", "label": "Config Policy", "sublabel": "YAML JSON Schema" }
+  ],
+  "edges": [
+    { "id": "fc2mav", "from": "fc", "to": "mavlink", "label": "Telemetry", "variant": "emphasis" },
+    { "id": "gcs2mav", "from": "gcs", "to": "mavlink", "label": "Commands", "variant": "emphasis" },
+    { "id": "mav2pipe", "from": "mavlink", "to": "pipeline", "label": "IDSMessage", "variant": "emphasis" },
+    { "id": "p2comm", "from": "pipeline", "to": "comm", "label": "CRC Replay Cmd RF" },
+    { "id": "p2fw", "from": "pipeline", "to": "firmware", "label": "FTP CMD HB" },
+    { "id": "p2ctrl", "from": "pipeline", "to": "ctrlsys", "label": "IMU GPS EKF" },
+    { "id": "p2nav", "from": "pipeline", "to": "nav", "label": "GPS BARO MAG" },
+    { "id": "p2lim", "from": "pipeline", "to": "limiter", "label": "allow" },
+    { "id": "lim2alert", "from": "limiter", "to": "alert", "label": "emit" },
+    { "id": "cfg2pipe", "from": "config", "to": "pipeline", "label": "policy" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Pipeline CHEAPEST FIRST", "items": ["1 CRC L0 early exit", "2 Replay L1 sliding window", "3 CmdInject L2 state machine", "4 RFJam L3 RADIO_STATUS", "4 Firmware L4 FTP version params", "5 Behavioral L5 5sigma drift", "6 Integrity L6 HMAC-SHA256", "7 CtrlSys L7 6det fusion", "8 Nav L8 18det trust"] },
+    { "dot": "emerald", "title": "Legend", "items": ["Security Detection", "Detector Module", "Config Policy", "MAVLink Stream", "External FC GCS SITL"] }
+  ]
+}

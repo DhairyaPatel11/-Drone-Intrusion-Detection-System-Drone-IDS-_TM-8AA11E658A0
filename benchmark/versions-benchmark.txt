@@ -1,0 +1,14 @@
+# Benchmark / HIL environment record (Phase 5-6)
+# Fill the TO MEASURE rows on each board and commit alongside the CSVs.
+
+## Harness software
+python                     = local (see below) ; board = TO MEASURE
+pymavlink                  = TO MEASURE (board)
+psutil                     = optional, TO MEASURE (board)
+pytest                     = 8.x (harness tests only)
+
+## Hosts
+hw = <board name>          = TO MEASURE (RPi 3B / Jetson Nano / Pixhawk)
+os = TO MEASURE
+cpu_freq_governor          = performance (recommended)
+# capture: python3 -c "import sys,platform;print(sys.version);print(platform.platform())"

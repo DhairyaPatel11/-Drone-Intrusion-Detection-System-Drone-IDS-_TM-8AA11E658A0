@@ -1,0 +1,201 @@
+# Command-Injection Detector Policy  (Phase 1)
+# Validated against ids_config.POLICY_SCHEMA at load time.
+# Missing/invalid keys => ConfigError at startup (fail loudly).
+
+# fail-safe: alert_and_pass (never drop flight-critical traffic, only warn)
+fail_mode: alert_and_pass
+
+# Authorized GCS source system ids. Commands from any other sysid are
+# flagged as unauthorized_command_source.
+authorized_sysids: [255]
+
+# Authorized GCS source component ids (MAV_COMP_ID_MISSIONPLANNER=190 by default)
+authorized_compids: [190]
+
+# Per-sysid command flood limits
+rate_limit:
+  commands_per_sec: 20
+
+# ArduPilot Copter mode table (HEARTBEAT custom_mode int -> canonical name)
+modes:
+  0: STABILIZE
+  1: ACRO
+  2: ALT_HOLD
+  3: AUTO
+  4: GUIDED
+  5: LOITER
+  6: RTL
+  7: CIRCLE
+  8: LAND
+  9: DRIFT
+  10: SPORT
+  11: FLIP
+  13: POSHOLD
+  14: BRAKE
+  15: THROW
+  16: AVOID_ADSB
+  17: GUIDED_NOGPS
+  18: SMART_RTL
+  19: FLOWHOLD
+  20: FOLLOW
+  21: ZIGZAG
+  22: SYSTEMID
+  23: AUTOROTATE
+  24: AUTO_RTL
+
+# Per-flight-mode command allowlists (checked ON TOP of the phase tables)
+mode_allowed_commands:
+  STABILIZE: [COMPONENT_ARM_DISARM, DO_SET_MODE]
+  ACRO: [DO_SET_MODE]
+  ALT_HOLD: [DO_SET_MODE]
+  AUTO: [DO_SET_MODE]
+  GUIDED:
+    [NAV_TAKEOFF, NAV_LAND, NAV_WAYPOINT, NAV_LOITER_UNLIM,
+     NAV_RETURN_TO_LAUNCH, DO_SET_MODE, PARAM_SET]
+  LOITER: [NAV_WAYPOINT, DO_SET_MODE]
+  RTL: [DO_SET_MODE]
+  LAND: [DO_SET_MODE]
+  SMART_RTL: [DO_SET_MODE]
+  AUTO_RTL: [DO_SET_MODE]
+
+# Legal mode-to-mode transitions (enforced only if enforce_mode_transitions=true)
+mode_transitions:
+  STABILIZE:
+    [ACRO, ALT_HOLD, AUTO, GUIDED, LOITER, RTL, CIRCLE, LAND, DRIFT, SPORT,
+     FLIP, POSHOLD, BRAKE, THROW, AVOID_ADSB, GUIDED_NOGPS, SMART_RTL,
+     FLOWHOLD, FOLLOW, ZIGZAG, SYSTEMID, AUTOROTATE, AUTO_RTL]
+  ACRO: [STABILIZE, ALT_HOLD, AUTO, GUIDED, LOITER, RTL]
+  ALT_HOLD: [STABILIZE, ACRO, AUTO, GUIDED, LOITER, RTL, LAND]
+  AUTO: [STABILIZE, GUIDED, LOITER, RTL, LAND]
+  GUIDED: [STABILIZE, ALT_HOLD, AUTO, LOITER, RTL, LAND]
+  LOITER: [STABILIZE, ALT_HOLD, AUTO, GUIDED, RTL, LAND]
+  RTL: [STABILIZE, ALT_HOLD, AUTO, GUIDED, LOITER, LAND]
+  LAND: [STABILIZE, ALT_HOLD, AUTO, GUIDED, LOITER, RTL]
+  SMART_RTL: [STABILIZE, GUIDED, LOITER, RTL]
+  AUTO_RTL: [AUTO, GUIDED, LAND]
+
+enforce_mode_transitions: false   # true = flag illegal telemetry mode jumps
+
+# Per-command parameter bounds (validate values, not just ids)
+command_params:
+  COMPONENT_ARM_DISARM:
+    param1: {enum: [0, 1]}              # 1=arm 0=disarm
+  NAV_TAKEOFF:
+    param1: {min: -15.0, max: 45.0}     # pitch (deg)
+    param7: {min: 0.5, max: 120.0}      # takeoff altitude (m)
+  NAV_LAND:
+    param7: {min: 0.0, max: 60.0}       # abort altitude (m)
+  NAV_RETURN_TO_LAUNCH: {}
+  NAV_LOITER_UNLIM: {}
+  NAV_WAYPOINT:
+    param1: {min: 0.0, max: 3600.0}     # hold time (s)
+    param2: {min: 0.0, max: 100.0}      # accept radius (m)
+  DO_SET_MODE:
+    param1: {mode: true}                # must be a valid ArduPilot mode
+
+# Geofence: any coordinate/altitude outside is flagged
+geofence:
+  lat_min: -90.0
+  lat_max: 90.0
+  lon_min: -180.0
+  lon_max: 180.0
+  alt_min: -50.0
+  alt_max: 5000.0
+
+# PARAM_SET allow-list (values outside bounds or names not listed = flagged)
+param_set_rules:
+  ANGLE_MAX: {min: 100.0, max: 4500.0}
+  ATC_RATE_RP_P: {min: 0.001, max: 1.0}
+  WPNAV_SPEED: {min: 100.0, max: 2000.0}
+  RTL_ALT: {min: 0.0, max: 1000.0}
+
+mission:
+  max_items: 32767
+  min_waypoint_sep_m: 0.0
+
+ack:
+  timeout_s: 3.0
+
+signing:
+  require: false                       # true = flag unsigned frames
+  verify_when_present: false           # true = verify signature if key set
+  timestamp_tolerance_s: 30.0
+
+# Phase 3 — cyber-physical fusion checks (pluggable, per-check thresholds).
+# Each check cross-references the latest telemetry snapshot; thresholds must
+# be tuned per platform (SITL defaults here, validated in Phase 5/6).
+physical:
+  enabled: true
+  max_telemetry_age_s: 5.0             # stale telemetry => physical checks skip
+  checks:
+    disarm_vs_airborne:
+      enabled: true
+      max_disarm_alt_m: 0.5            # DISARM only near the ground
+      max_disarm_climb_ms: 0.5
+    takeoff_vs_flying:
+      enabled: true
+      min_takeoff_alt_m: 1.0           # NAV_TAKEOFF only from low altitude
+    waypoint_teleport:
+      enabled: true
+      max_step_m: 500.0                # max per-command horizontal step
+      max_alt_step_m: 50.0
+    altitude_teleport:
+      enabled: true
+      max_alt_step_m: 50.0             # commanded alt vs baro/GPS delta
+
+# Phase 4 — alerting
+alerting:
+  rate_limit_per_sec: 10              # max alerts per second
+  dedupe_window_s: 30.0               # suppress duplicate alerts within window
+  include_mitre: true                 # include MITRE ATT&CK for ICS tags
+
+# MAV_CMD int ids for the canonical command names used in this policy
+command_ids:
+  COMPONENT_ARM_DISARM: 400
+  NAV_TAKEOFF: 22
+  NAV_LAND: 21
+  NAV_RETURN_TO_LAUNCH: 20
+  DO_SET_MODE: 183
+  NAV_WAYPOINT: 16
+  NAV_LOITER_UNLIM: 17
+
+# Flight states and which MAVLink commands are legal in each.
+# transitions_to is informational + sanity-checked (must reference real
+# states). Ground-truth state changes still come ONLY from telemetry.
+states:
+  DISARMED:
+    allowed_commands: [COMPONENT_ARM_DISARM]
+    transitions_to: [ARMED]
+  ARMED:
+    allowed_commands: [NAV_TAKEOFF, NAV_LOITER_UNLIM, DO_SET_MODE]
+    transitions_to: [TAKING_OFF, DISARMED]
+  TAKING_OFF:
+    allowed_commands: [DO_SET_MODE]
+    transitions_to: [FLYING, LANDING]
+  FLYING:
+    allowed_commands:
+      [NAV_LAND, NAV_RETURN_TO_LAUNCH, NAV_LOITER_UNLIM, DO_SET_MODE,
+       NAV_WAYPOINT, PARAM_SET]
+    transitions_to: [LANDING, RETURNING, DISARMED]
+  LANDING:
+    allowed_commands: [DO_SET_MODE]
+    transitions_to: [DISARMED, ARMED]
+  RETURNING:
+    allowed_commands: [DO_SET_MODE]
+    transitions_to: [LANDING, FLYING, DISARMED]
+
+# Per-mission-profile overrides. Each profile deep-merges over the base
+# policy above (e.g. a delivery profile may also allow NAV_LAND in LANDING,
+# a survey profile may disallow PARAM_SET mid-flight).
+mission_profiles:
+  recon:
+    rate_limit:
+      commands_per_sec: 10
+  delivery:
+    states:
+      FLYING:
+        allowed_commands:
+          [NAV_LAND, NAV_RETURN_TO_LAUNCH, NAV_LOITER_UNLIM, DO_SET_MODE,
+           NAV_WAYPOINT, PARAM_SET, NAV_CONTINUE_AND_CHANGE_ALT]
+  survey:
+    authorized_sysids: [255, 10]

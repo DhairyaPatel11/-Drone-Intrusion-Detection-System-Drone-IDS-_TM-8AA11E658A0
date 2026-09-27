@@ -1,0 +1,210 @@
+{
+  "aggregate": {
+    "f1": 0.963,
+    "fn": 0,
+    "fp": 1,
+    "precision": 0.9286,
+    "recall": 1.0,
+    "tp": 13
+  },
+  "benign_only": {
+    "alerts": 0,
+    "fpr": 0.0,
+    "note": "on-target (SITL/hardware) FPR: TO MEASURE",
+    "packets": 100
+  },
+  "definition": {
+    "fn": "1 when expected alert never fired",
+    "fp": "alerts in window not matching expected spec",
+    "fpr": "benign alerts / benign packets",
+    "tp": "attack fired and expected alert observed (binary per class)"
+  },
+  "generated_utc": "2026-09-27T05:57:43Z",
+  "latency_us": {
+    "attack_path": {
+      "mean_us": 114.54,
+      "p50_us": 85.0,
+      "p95_us": 259.59,
+      "p99_us": 344.21
+    },
+    "clean_path": {
+      "mean_us": 114.24,
+      "p50_us": 121.15,
+      "p95_us": 243.86,
+      "p99_us": 273.02
+    },
+    "note": "offline synthetic only; on-target hardware latency: TO MEASURE"
+  },
+  "per_class": {
+    "actuator_asymmetry": {
+      "class": "actuator_asymmetry",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "attitude_tracking_error": {
+      "class": "attitude_tracking_error",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "baro_spoofing": {
+      "class": "baro_spoofing",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "crc": {
+      "class": "crc",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "ekf_innovation_error": {
+      "class": "ekf_innovation_error",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "geofence_violation": {
+      "class": "geofence_violation",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "gps_spoofing": {
+      "class": "gps_spoofing",
+      "f1": 0.6667,
+      "fn": 0,
+      "fp": 1,
+      "precision": 0.5,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "optical_flow_anomaly": {
+      "class": "optical_flow_anomaly",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "replay": {
+      "class": "replay",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "rf_jam": {
+      "class": "rf_jam",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "rtl_no_gps_lock": {
+      "class": "rtl_no_gps_lock",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "state_violation": {
+      "class": "state_violation",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    },
+    "unauthorized": {
+      "class": "unauthorized",
+      "f1": 1.0,
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 1
+    }
+  },
+  "pipeline_stats": {
+    "anomaly": {
+      "alerts": 0,
+      "last_latency_us": 116.6,
+      "packets": 200
+    },
+    "behavioral": {
+      "alerts": 0,
+      "last_latency_us": 115.3,
+      "packets": 200
+    },
+    "command_injection": {
+      "alerts": 0,
+      "last_latency_us": 116.7,
+      "packets": 200
+    },
+    "control_system": {
+      "alerts": 0,
+      "last_latency_us": 55.3,
+      "packets": 200
+    },
+    "firmware": {
+      "alerts": 0,
+      "last_latency_us": 116.8,
+      "packets": 200
+    },
+    "integrity": {
+      "alerts": 0,
+      "last_latency_us": 115.3,
+      "packets": 200
+    },
+    "navigation": {
+      "alerts": 0,
+      "last_latency_us": 50.7,
+      "packets": 200
+    },
+    "overall": {
+      "alerts": 0,
+      "last_latency_us": 920.3,
+      "packets": 200
+    },
+    "replay": {
+      "alerts": 0,
+      "last_latency_us": 116.8,
+      "packets": 200
+    },
+    "rf_jamming": {
+      "alerts": 0,
+      "last_latency_us": 116.8,
+      "packets": 200
+    }
+  },
+  "scope": "offline_synthetic_replay"
+}

@@ -1,0 +1,14 @@
+class,tp,fp,fn,precision,recall,f1
+unauthorized,1,0,0,1.0,1.0,1.0
+replay,1,0,0,1.0,1.0,1.0
+crc,1,0,0,1.0,1.0,1.0
+state_violation,1,0,0,1.0,1.0,1.0
+rf_jam,1,0,0,1.0,1.0,1.0
+gps_spoofing,1,1,0,0.5,1.0,0.6667
+baro_spoofing,1,0,0,1.0,1.0,1.0
+optical_flow_anomaly,1,0,0,1.0,1.0,1.0
+ekf_innovation_error,1,0,0,1.0,1.0,1.0
+attitude_tracking_error,1,0,0,1.0,1.0,1.0
+actuator_asymmetry,1,0,0,1.0,1.0,1.0
+geofence_violation,1,0,0,1.0,1.0,1.0
+rtl_no_gps_lock,1,0,0,1.0,1.0,1.0

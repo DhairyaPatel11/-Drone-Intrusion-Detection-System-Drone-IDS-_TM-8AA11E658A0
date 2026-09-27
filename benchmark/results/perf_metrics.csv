@@ -1,0 +1,13 @@
+metric,value,unit
+host,Windows/AMD64 (LAPTOP-M6N25B3B),
+packets,1000,
+elapsed_s,0.3604,s
+throughput_pkts_s,2775.0,pkts/s
+p50_us,365.0,us
+p95_us,569.57,us
+p99_us,938.82,us
+mean_us,357.48,us
+cpu_percent,99.73,%
+py_allocator_peak_mb,0.04,MB
+rss_mb,40.71875,MB
+board_hw,TO MEASURE,
