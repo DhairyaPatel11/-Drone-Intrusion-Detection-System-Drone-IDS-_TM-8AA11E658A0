@@ -33,7 +33,7 @@ Major detection capabilities with headline metrics (offline synthetic replay, 50
 
 Expected Stage 2 outcome: HIL validation on Pixhawk hardware with live MAVLink link, on-target latency/CPU/RSS measurement on RPi 3B and Jetson Nano, MAVLink 2.0 signing with real key management, and soak testing under real sensor noise.
 
-Current development status: **All four modules implemented and unit-tested (212 tests passing)**; offline evaluation F1 = 0.963 (micro-average, 13 classes, tp=13 fp=1 fn=0); pipeline latency p50 346 µs, p99 923 µs, throughput 2,924 pkts/s, RSS 42 MB, CPU 91% on Windows AMD64 host. **On-target (RPi 3B / Jetson Nano) performance: TO MEASURE** — GitHub Actions ARM build available for CI (see `benchmark/results/perf_metrics.csv`, `docs/System Limits.md`). SITL injection validated only at registry level (pymavlink not installed on Windows); live SITL validation deferred. No git history in vault.
+Current development status: **All four modules implemented and unit-tested (212 tests passing)**; offline evaluation F1 = 0.963 (micro-average, 13 classes, tp=13 fp=1 fn=0); pipeline latency p50 638 µs, p99 1483 µs, throughput 1,580 pkts/s, RSS 42.6 MB, CPU 91% on Windows AMD64 host (5000 packets, 1000 warmup, `tracemalloc` off during timing). **On-target (RPi 3B / Jetson Nano) performance: TO MEASURE** — run `python -m benchmark.benchmark_perf` on the board and commit the resulting CSV (see `benchmark/hil_guide.md`, `benchmark/results/perf_metrics.csv`, `docs/SYSTEM_LIMITS.md`). SITL injection validated only at registry level (no live SITL endpoint on the dev host); live SITL validation deferred. Code is committed and tagged `v1.0-stage1-submission`.
 
 ---
 
@@ -54,9 +54,9 @@ UAVs in the PUSHPAK Grand Challenge context operate with ArduPilot on Pixhawk-cl
 The IDS assumes a single-vehicle ArduPilot Copter mission (high-value transport or GPS-denied survey) with mission-profile overrides in `configs/navigation.yaml` (`high_value` tightens GNSS thresholds; `gps_denied` disables INS/GNSS consistency, shifts source weights to INS/optflow/baro, raises max uncertainty to 100 m). The GCS is a single authorized sysid (default 255) and compid (190). The system does not address swarm correlation.
 
 ## Limitations of Existing Approaches (Mentor Alignment)
-- Arnab Maity (MAVShield, SWaP-C): Emphasized that companion-side IDS must not add latency to the FC control loop; SWaP-C constraints require bounded CPU/RSS on Pi-class hardware. Our pipeline is single-threaded, pre-allocates alert lists, avoids hot-path allocation (0.16 MB peak allocator), and measures per-stage latency.
+- Arnab Maity (MAVShield, SWaP-C): Emphasized that companion-side IDS must not add latency to the FC control loop; SWaP-C constraints require bounded CPU/RSS on Pi-class hardware. Our pipeline is single-threaded, pre-allocates alert lists, shows no unbounded hot-path allocation (steady-state allocator delta ~0 MB after warmup; RSS 42.6 MB), and measures per-stage latency.
 - Faruk Kazi (hybrid cyber-physical IDS): Argued that pure network-level IDS misses cyber-physical attacks; cross-sensor consistency and EKF innovation monitoring are necessary. Our control-system and navigation modules implement exactly this.
-- Evaluation rubric weights: detection accuracy 20%, FPR 20%, coverage 15%, latency 10%, computational efficiency 10%. Our offline F1 0.963, FPR 0/500 benign, p50 346 µs, throughput 2,924 pkts/s on Windows host.
+- Evaluation rubric weights: detection accuracy 20%, FPR 20%, coverage 15%, latency 10%, computational efficiency 10%. Our offline F1 0.963, FPR 0/500 benign, p50 638 µs, throughput 1,580 pkts/s on Windows host.
 
 ## Proposed Approach and Gap Coverage
 The Drone IDS closes the gap by **running entirely on the companion computer**, ingesting the MAVLink stream via a normalized `IDSMessage` envelope, applying a cheapest-first/early-exit 9-stage pipeline (CRC → replay → command injection → RF jamming → firmware → behavioral → integrity → control-system → navigation), and emitting advisory alerts with `affected_channel`, `recommended_action`, MITRE tags, and `can_re_anchor` for navigation recovery. The architecture is deliberately **advisory-only** — `alert_and_block` sets `drop=true` in evidence but never takes actuator control. This addresses the mentor-identified gaps: bounded latency per stage, cyber-physical cross-sensor fusion, explicit non-goals (no active response, no carrier-phase processing, no swarm correlation), and full traceability to MITRE ATT&CK for ICS (T0883, T0884, T0856, T0831, T0886).
@@ -136,21 +136,37 @@ Full threat catalogue: `firmware_attacks_threat_model.md` (F-001…F-012), `conf
 **Latency** (from `benchmark/results/perf_metrics.csv`, `benchmark/results/latency_hist.csv`):
 | Metric | Value | Conditions |
 |--------|-------|------------|
-| Pipeline p50 | 346.2 µs | 5000 packets, 500 warmup, 9 stages |
-| Pipeline p95 | 571.7 µs | |
-| Pipeline p99 | 923.11 µs | |
-| Mean | 339.53 µs | |
-| Clean-path p50 | 106.2 µs | `benchmark/results/latency_hist.csv` (500 benign) |
-| Clean-path p95 | 181.97 µs | |
-| Clean-path p99 | 290.51 µs | |
-| Attack-path p50 | 72.25 µs | 13 attack classes |
-| Per-stage p50 | Anomaly 10, Replay 15, CmdInj 5, RF 20, Firmware 15, Behavioral 10, Integrity 10, CtrlSys 30, Nav 50 µs | `docs/System Limits.md` Section 3 |
+| Pipeline p50 | 637.9 µs | 5000 packets, 1000 warmup, 9 stages, `tracemalloc` OFF during timing |
+| Pipeline p95 | 1225.17 µs | |
+| Pipeline p99 | 1482.8 µs | |
+| Mean | 630.35 µs | |
+| Clean-path p50 | 121.15 µs | `benchmark/results/metrics.json` `latency_us.clean_path` (500 benign) |
+| Clean-path p95 | 243.86 µs | |
+| Clean-path p99 | 273.02 µs | |
+| Attack-path p50 | 85.0 µs | 13 attack classes, `latency_us.attack_path` |
+| Per-stage p50 | Anomaly 10, Replay 15, CmdInj 5, RF 20, Firmware 15, Behavioral 10, Integrity 10, CtrlSys 30, Nav 50 µs | `docs/SYSTEM_LIMITS.md` Section 3 (estimate, not separately instrumented) |
 
 **Throughput & Resources** (from `benchmark/results/perf_metrics.csv`):
-- Throughput: 2,924 pkts/s
-- CPU: 91.38% (single core)
-- RSS: 42.63 MB
-- Python allocator peak: 0.16 MB
+- Throughput: 1,580 pkts/s
+- CPU: 91.36% (single core)
+- RSS: 42.57 MB
+- Python allocator peak: 0.0 MB (steady-state delta measured after warmup — i.e. no unbounded per-packet growth; use RSS for total footprint)
+
+**Measurement caveats (important for reviewers):**
+- `tracemalloc` is deliberately **disabled** during the timing loop. It instruments
+  every allocation and inflated per-packet latency by ~3.8x on this pipeline
+  (p50 0.47 ms → 1.78 ms, measured back-to-back on this host). Allocator peak is
+  sampled in a separate throwaway pass. The CSV records this explicitly as
+  `tracemalloc_active_during_timing,False`.
+- Latency **grows mildly with history depth** because the behavioural and
+  navigation stages aggregate over rolling windows: p50 ≈ 0.47 ms at
+  500-warmup/1500-packets vs ≈ 0.64–0.68 ms at 1000-warmup/5000-packets. The
+  figures above quote the deeper (pessimistic) configuration.
+- Run-to-run spread is ≈ ±5% on p50 and ±15% on p99 on a shared laptop. Single-run
+  figures should not be read as tight bounds.
+- The dominant per-packet cost is the **companion-integrity directory scan**
+  (`os.path.isdir` on watched paths, ~3 filesystem probes per packet) plus the
+  18-rule navigation fusion. See `docs/SYSTEM_LIMITS.md` for the planned fix.
 
 **Accuracy** (from `benchmark/results/metrics.csv`, 13 classes, 500 benign):
 | Class | TP | FP | FN | Precision | Recall | F1 |
@@ -224,14 +240,15 @@ FPR on 500 benign packets: 0.000000 (0 alerts).
 
 FPR: 0/500 = 0.000000.
 
-**Performance Metrics** (from `benchmark/results/perf_metrics.csv`, `benchmark/results/latency_hist.csv`):
-- Pipeline p50/p95/p99: 346.2 / 571.7 / 923.11 µs
-- Clean-path p50/p95/p99: 106.2 / 181.97 / 290.51 µs
-- Attack-path p50: 72.25 µs
-- Throughput: 2,924 pkts/s
-- CPU: 91.38% (single core, Windows AMD64)
-- RSS: 42.63 MB
-- Python allocator peak: 0.16 MB
+**Performance Metrics** (from `benchmark/results/perf_metrics.csv`, `benchmark/results/metrics.json`):
+- Pipeline p50/p95/p99: 637.9 / 1225.17 / 1482.8 µs (5000 packets, 1000 warmup, tracemalloc off)
+- Clean-path p50/p95/p99: 121.15 / 243.86 / 273.02 µs
+- Attack-path p50: 85.0 µs
+- Throughput: 1,580 pkts/s
+- CPU: 91.36% (single core, Windows AMD64)
+- RSS: 42.57 MB
+- Python allocator peak: 0.0 MB (steady-state delta; no unbounded per-packet growth)
+- On-target (RPi 3B / Jetson Nano): **TO MEASURE** — see `benchmark/hil_guide.md`
 
 **Failure Handling / Fail-Safe**:
 - Default policy `fail_mode: alert_and_pass` — alerts emitted, `drop` flag never set.

@@ -11,7 +11,7 @@
     "alerts": 0,
     "fpr": 0.0,
     "note": "on-target (SITL/hardware) FPR: TO MEASURE",
-    "packets": 100
+    "packets": 500
   },
   "definition": {
     "fn": "1 when expected alert never fired",
@@ -19,19 +19,19 @@
     "fpr": "benign alerts / benign packets",
     "tp": "attack fired and expected alert observed (binary per class)"
   },
-  "generated_utc": "2026-09-27T05:57:43Z",
+  "generated_utc": "2026-09-27T07:10:39Z",
   "latency_us": {
     "attack_path": {
-      "mean_us": 114.54,
-      "p50_us": 85.0,
-      "p95_us": 259.59,
-      "p99_us": 344.21
+      "mean_us": 497.46,
+      "p50_us": 387.9,
+      "p95_us": 1085.69,
+      "p99_us": 1302.7
     },
     "clean_path": {
-      "mean_us": 114.24,
-      "p50_us": 121.15,
-      "p95_us": 243.86,
-      "p99_us": 273.02
+      "mean_us": 608.64,
+      "p50_us": 636.4,
+      "p95_us": 1168.72,
+      "p99_us": 1490.86
     },
     "note": "offline synthetic only; on-target hardware latency: TO MEASURE"
   },
@@ -157,52 +157,52 @@
   "pipeline_stats": {
     "anomaly": {
       "alerts": 0,
-      "last_latency_us": 116.6,
+      "last_latency_us": 718.6,
       "packets": 200
     },
     "behavioral": {
       "alerts": 0,
-      "last_latency_us": 115.3,
+      "last_latency_us": 697.5,
       "packets": 200
     },
     "command_injection": {
       "alerts": 0,
-      "last_latency_us": 116.7,
+      "last_latency_us": 710.5,
       "packets": 200
     },
     "control_system": {
       "alerts": 0,
-      "last_latency_us": 55.3,
+      "last_latency_us": 369.8,
       "packets": 200
     },
     "firmware": {
       "alerts": 0,
-      "last_latency_us": 116.8,
+      "last_latency_us": 709.5,
       "packets": 200
     },
     "integrity": {
       "alerts": 0,
-      "last_latency_us": 115.3,
+      "last_latency_us": 697.3,
       "packets": 200
     },
     "navigation": {
       "alerts": 0,
-      "last_latency_us": 50.7,
+      "last_latency_us": 324.1,
       "packets": 200
     },
     "overall": {
       "alerts": 0,
-      "last_latency_us": 920.3,
+      "last_latency_us": 5649.9,
       "packets": 200
     },
     "replay": {
       "alerts": 0,
-      "last_latency_us": 116.8,
+      "last_latency_us": 712.8,
       "packets": 200
     },
     "rf_jamming": {
       "alerts": 0,
-      "last_latency_us": 116.8,
+      "last_latency_us": 709.8,
       "packets": 200
     }
   },

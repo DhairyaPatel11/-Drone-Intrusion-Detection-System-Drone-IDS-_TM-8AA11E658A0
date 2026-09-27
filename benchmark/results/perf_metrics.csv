@@ -1,13 +1,18 @@
 metric,value,unit
 host,Windows/AMD64 (LAPTOP-M6N25B3B),
-packets,1000,
-elapsed_s,0.3604,s
-throughput_pkts_s,2775.0,pkts/s
-p50_us,365.0,us
-p95_us,569.57,us
-p99_us,938.82,us
-mean_us,357.48,us
-cpu_percent,99.73,%
-py_allocator_peak_mb,0.04,MB
-rss_mb,40.71875,MB
+python,3.13.3,
+packets,5000,
+warmup,1000,
+elapsed_s,3.164,s
+throughput_pkts_s,1580.3,pkts/s
+p50_us,637.9,us
+p95_us,1225.17,us
+p99_us,1482.8,us
+mean_us,630.35,us
+cpu_percent,91.36,%
+tracemalloc_active_during_timing,False,
+py_allocator_peak_mb,0.0,MB
+py_allocator_peak_mb_note,steady-state delta measured after warmup; ~0 means no unbounded per-packet growth (use rss_mb for total footprint),
+rss_mb,42.56640625,MB
+scope,offline_synthetic_replay,
 board_hw,TO MEASURE,

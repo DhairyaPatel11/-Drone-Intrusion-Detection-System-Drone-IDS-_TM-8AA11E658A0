@@ -114,16 +114,40 @@ Drone-Intrusion-Detection-System/
 - **Synthetic simulator**: `NavSample`-style interface for offline testing
 - **SITL adapter**: `benchmark/hil_guide.md` for live MAVLink integration
 
-## Performance (Windows Host)
+## Performance
+
+Measured on the development host (Windows/AMD64, CPython 3.13.3) with
+`python -m benchmark.benchmark_perf --packets 5000 --warmup 1000`. Raw output:
+[`benchmark/results/perf_metrics.csv`](benchmark/results/perf_metrics.csv).
 
 | Metric | Value |
 |--------|-------|
-| Pipeline p50/p95/p99 | 346 / 572 / 923 µs |
-| Throughput | 2,924 pkts/s |
-| RSS | 42 MB |
-| CPU | 91% (single core) |
+| Pipeline p50 / p95 / p99 | 638 / 1225 / 1483 µs per packet |
+| Throughput | 1,580 pkts/s |
+| RSS | 42.6 MB |
+| CPU | 91% of one core |
 
-**On-target (RPi 3B / Jetson Nano): TO MEASURE**
+Notes on how these were produced — please read before comparing:
+
+- **Scope is offline synthetic replay**, not flight. No SITL, no radio, no Pixhawk.
+- **`tracemalloc` is disabled during the timing loop.** It instruments every
+  allocation and inflated per-packet latency by ~3.8x on this pipeline
+  (p50 0.47 ms → 1.78 ms, measured back-to-back), which would overstate
+  production cost. Allocator peak is sampled in a separate pass and comes out
+  ~0 MB, meaning no unbounded per-packet growth after warmup.
+- **Latency grows mildly with history depth**, because the behavioural and
+  navigation stages aggregate over rolling windows: p50 ≈ 0.47 ms at
+  500-warmup/1500-packets, ≈ 0.64–0.68 ms at 1000-warmup/5000-packets. The table
+  quotes the deeper configuration, which is the pessimistic one.
+- The dominant remaining cost is the **per-packet companion-integrity directory
+  scan** (`os.path.isdir` on the watched paths) plus the 18-rule navigation
+  fusion. Caching the scan on a timer is the obvious next optimisation and is
+  listed in `docs/SYSTEM_LIMITS.md`.
+- Run-to-run spread is roughly ±5% on p50, ±15% on p99 on a shared laptop.
+
+**On-target (Raspberry Pi 3B / Jetson Nano): TO MEASURE** — run the identical
+command there and commit the resulting CSV. Procedure in
+[`benchmark/hil_guide.md`](benchmark/hil_guide.md).
 
 ## Documentation
 

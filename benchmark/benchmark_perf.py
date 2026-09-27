@@ -8,6 +8,13 @@ Measures on the *current host* (offline synthetic frames):
     * Python-allocator peak (MB, tracemalloc) — NOT full RSS; real RSS must be
       captured on-target with psutil/pidstat ("TO MEASURE" there).
 
+Measurement note: the timing loop runs with tracemalloc DISABLED. tracemalloc
+instruments every allocation and inflated per-packet latency by ~3.8x on this
+pipeline (p50 0.47 ms -> 1.78 ms measured back-to-back on the reference host),
+which would overstate production cost. Allocator peak is therefore sampled in a
+separate throwaway pass; the CSV records this as
+``tracemalloc_active_during_timing = False``.
+
 Usage (from the repo root):
     python -m benchmark.benchmark_perf [--packets 20000] [--warmup 1000]
 
@@ -56,10 +63,30 @@ def _rss_mb_if_available() -> float | None:
         return None
 
 
+def _peak_alloc_mb(pipe: "IDSPipeline", frames: List[attacks.IDSMessage],
+                   warmup: int, probe_packets: int) -> float:
+    """Peak Python-allocator usage (MB) measured in a SEPARATE pass.
+
+    tracemalloc instruments every allocation and inflates per-packet latency
+    by roughly 3-4x on this pipeline, so it must never be active while the
+    timing loop runs. Memory is therefore sampled on its own throwaway pass
+    and the latency numbers below stay instrument-free.
+    """
+    probe = IDSPipeline()
+    for i in range(min(warmup, len(frames))):
+        probe.ingest(frames[i])
+    tracemalloc.start()
+    for i in range(probe_packets):
+        probe.ingest(frames[(warmup + i) % len(frames)])
+    _cur, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    return peak / (1024.0 * 1024.0)
+
+
 def run_micro(
     packets: int, warmup: int, frames: List[attacks.IDSMessage]
 ) -> Dict[str, object]:
-    """Time per-packet ingestion through the real pipeline."""
+    """Time per-packet ingestion through the real pipeline (no instrumentation)."""
     pipe = IDSPipeline()
     lat: List[float] = []
 
@@ -67,7 +94,7 @@ def run_micro(
     for i in range(min(warmup, len(frames))):
         pipe.ingest(frames[i])
 
-    tracemalloc.start()
+    # NOTE: tracemalloc is deliberately NOT started here -- see _peak_alloc_mb.
     t_wall0 = time.perf_counter()
     t_cpu0 = time.process_time()
     for i in range(warmup, warmup + packets):
@@ -77,21 +104,23 @@ def run_micro(
         lat.append((time.perf_counter() - t0) * 1e6)
     wall = time.perf_counter() - t_wall0
     cpu = time.process_time() - t_cpu0
-    _cur, peak = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
+
+    peak_mb = _peak_alloc_mb(pipe, frames, warmup, min(packets, 1000))
 
     summary = latency_summary_us(lat)
     summary["mean_us"] = round(summary["mean_us"], 2)
     return {
         "host": _host_label(),
         "packets": packets,
+        "warmup": warmup,
         "elapsed_s": round(wall, 4),
         "throughput_pkts_s": round(packets / wall, 1) if wall else 0.0,
         "cpu_percent": round(100.0 * cpu / wall, 2) if wall else 0.0,
-        "py_allocator_peak_mb": round(peak / (1024.0 * 1024.0), 2),
+        "tracemalloc_active_during_timing": False,
+        "py_allocator_peak_mb": round(peak_mb, 2),
         "rss_mb": _rss_mb_if_available(),       # None -> psutil absent
         **{k: summary[k] for k in ("p50_us", "p95_us", "p99_us", "mean_us")},
-        "units": ("latency=µs/packet, cpu%%=process_cpu, "
+        "units": ("latency=us/packet, cpu%=process_cpu, "
                   "peak=RSS MB; hardware figures TO MEASURE on target"),
     }
 
@@ -121,7 +150,9 @@ def main(argv: List[str] | None = None) -> int:
     out = os.path.join(RESULTS_DIR, "perf_metrics.csv")
     write_csv(out, [["metric", "value", "unit"]] + [
         ["host", m["host"], ""],
+        ["python", "%d.%d.%d" % sys.version_info[:3], ""],
         ["packets", m["packets"], ""],
+        ["warmup", m["warmup"], ""],
         ["elapsed_s", m["elapsed_s"], "s"],
         ["throughput_pkts_s", m["throughput_pkts_s"], "pkts/s"],
         ["p50_us", m["p50_us"], "us"],
@@ -129,8 +160,13 @@ def main(argv: List[str] | None = None) -> int:
         ["p99_us", m["p99_us"], "us"],
         ["mean_us", m["mean_us"], "us"],
         ["cpu_percent", m["cpu_percent"], "%"],
+        ["tracemalloc_active_during_timing", m["tracemalloc_active_during_timing"], ""],
         ["py_allocator_peak_mb", m["py_allocator_peak_mb"], "MB"],
+        ["py_allocator_peak_mb_note",
+         "steady-state delta measured after warmup; ~0 means no unbounded "
+         "per-packet growth (use rss_mb for total footprint)", ""],
         ["rss_mb", m["rss_mb"], "MB" if m["rss_mb"] is not None else "TO MEASURE"],
+        ["scope", "offline_synthetic_replay", ""],
         ["board_hw", "TO MEASURE", ""],
     ])
     print("\nCSV written to benchmark/results/perf_metrics.csv")

@@ -39,27 +39,55 @@ updated: 2026-09-26
 
 ## 3. Performance & Operational Limits
 
-### Latency Budget (Measured on Windows Host)
-| Stage | p50 (µs) | p99 (µs) | Notes |
-|---|---|---|---|
-| Anomaly (CRC) | ~10 | ~30 | O(1) per packet |
-| Replay (window) | ~15 | ~40 | O(1) sliding window |
-| Command Injection | ~5 | ~20 | State machine lookup |
-| RF Jamming | ~20 | ~50 | Windowed stats |
-| Firmware | ~15 | ~40 | Periodic hash checks |
-| Behavioral | ~10 | ~30 | Inference every N packets |
-| Integrity | ~10 | ~30 | File hash comparison |
-| Control System | ~30 | ~80 | 6 detectors + fusion |
-| **Navigation** | **~50** | **~120** | 16 detectors + trust |
-| **TOTAL** | **346** | **923** | End-to-end |
+### Measured End-to-End Latency (Windows host, offline synthetic)
 
-**On-target (RPi 3B / Jetson Nano): TO MEASURE** — CPU likely bottleneck on Pi 3B (91% on Windows host).
+From `benchmark/results/perf_metrics.csv`, `python -m benchmark.benchmark_perf
+--packets 5000 --warmup 1000`, `tracemalloc` **off** during timing:
+
+| Metric | Value |
+|---|---|
+| p50 | 637.9 µs |
+| p95 | 1225.17 µs |
+| p99 | 1482.8 µs |
+| Throughput | 1,580 pkts/s |
+| RSS | 42.57 MB |
+| CPU | 91.36% (one core) |
+
+At the shallower 500-warmup / 1500-packet configuration the same code measures
+p50 ≈ 467 µs and ≈ 2,440 pkts/s. Latency therefore **grows with history depth**
+(the behavioural and navigation stages aggregate over rolling windows). Both
+ends are quoted so the depth sensitivity is visible rather than hidden.
+
+### Per-Stage Cost Breakdown (cProfile, indicative — NOT a measurement)
+
+These are relative costs from a 1,500-packet profile, useful for prioritising
+optimisation. They are *not* the source of the totals above and must not be
+summed to reproduce them.
+
+| Stage | Indicative cost | Notes |
+|---|---|---|
+| Companion integrity (dir scan) | ~14% | ~3 × `os.path.isdir` filesystem probes **per packet** — dominant single cost |
+| Navigation (18 rules + trust) | ~32% | `fusion_ids.check` + `nav_sensors.extract_all` |
+| Control system (6 detectors) | ~30% | Several `check()` passes per packet |
+| Anomaly (CRC) | ~3% | O(1) per packet |
+| Replay / command-inj / RF / firmware | ~small | Windowed stats, state machine, periodic hashes |
+| Behavioural | ~small | Inference every N packets |
+
+**Known optimisation, not yet implemented:** the companion-integrity module
+re-probes its watched directories on every packet. Caching the scan behind a
+short timer (e.g. 1 s) would remove the largest single per-packet cost without
+weakening detection meaningfully. Listed as an open risk, not a claim.
+
+**On-target (RPi 3B / Jetson Nano): TO MEASURE** — CPU is the likely bottleneck
+on Pi 3B (already 91% of one core on an x86 laptop). Run the identical command
+on the board and commit the CSV; see `benchmark/hil_guide.md`.
 
 ### Memory Bounds
 - Telemetry buffer: 200 samples × ~20 fields × 8 bytes ≈ 32 KB
 - History deques: max 200 entries per field
 - No hot-path allocations (pre-allocated alert list, reused dataclasses)
-- Python allocator peak: 0.16 MB (benchmark)
+- Python allocator peak: ~0 MB steady-state delta after warmup — i.e. no unbounded
+  per-packet growth. Total footprint is the RSS figure (42.57 MB).
 
 ### False Positive Rate Targets
 | Layer | Target FPR | Measured (500 benign) |
@@ -113,9 +141,10 @@ updated: 2026-09-26
 | Eval F1 (13 classes) | 0.963 | Offline synthetic replay, 500 benign packets |
 | Precision | 0.929 | |
 | Recall | 1.000 | |
-| Clean-path p50 latency | 346 µs | Windows 11, Python 3.13, AMD64 |
-| Attack-path p50 latency | 72 µs | |
-| On-target (Pi/Jetson) | **TO MEASURE** | GitHub Actions ARM build available for CI |
+| Clean-path p50 latency | 121 µs | Windows 11, Python 3.13, AMD64 (`metrics.json` `latency_us.clean_path`) |
+| Attack-path p50 latency | 85 µs | 13 attack classes (`latency_us.attack_path`) |
+| End-to-end p50 / p99 | 638 / 1483 µs | 5000 packets, 1000 warmup, tracemalloc off |
+| On-target (Pi/Jetson) | **TO MEASURE** | `benchmark/hil_guide.md` |
 
 ---
 

@@ -103,10 +103,10 @@ updated: 2026-09-26
 ### Performance Bounds (Measured on Windows Host)
 | Metric | Value | Note |
 |---|---|---|
-| Pipeline latency p50 | 346 µs | 9-stage pipeline incl. NavigationStage |
-| Pipeline latency p99 | 923 µs | |
-| Throughput | 2,924 pkts/s | |
-| RSS | 42 MB | |
+| Pipeline latency p50 | 638 µs | 9-stage pipeline incl. NavigationStage (5000 pkts, 1000 warmup) |
+| Pipeline latency p99 | 1483 µs | ±15% run-to-run on a shared laptop |
+| Throughput | 1,580 pkts/s | tracemalloc off during timing |
+| RSS | 42.6 MB | Steady state |
 | CPU | 91% | Single core; **TO MEASURE on Pi 3B / Jetson Nano** |
 | Max telemetry age | 5 s (nav) / 2 s (control) | Stale data skips physical checks |
 
