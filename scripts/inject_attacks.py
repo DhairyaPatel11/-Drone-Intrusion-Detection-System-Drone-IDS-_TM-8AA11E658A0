@@ -63,6 +63,8 @@ def make_parser() -> argparse.ArgumentParser:
                    help="Packets per second (default: 10)")
     p.add_argument("--loop", action="store_true",
                    help="Cycle attacks forever (Ctrl-C to stop)")
+    p.add_argument("--run-all", action="store_true",
+                   help="Run each attack once sequentially, then exit")
     p.add_argument("--connect", type=str,
                    help="Live MAVLink connection string (e.g. udp:0.0.0.0:14550)")
     p.add_argument("--benign-ratio", type=float, default=0.3,
@@ -166,6 +168,9 @@ def main():
 
     if args.connect:
         run_live_capture(args.connect, pipe, args.rate)
+    elif args.run_all:
+        run_synthetic(pipe, None, args.duration, args.rate,
+                      args.benign_ratio, loop=False)
     else:
         run_synthetic(pipe, args.attack, args.duration, args.rate,
                       args.benign_ratio, args.loop)
