@@ -104,7 +104,7 @@ updated: 2026-09-26
 | Metric | Value | Note |
 |---|---|---|
 | Pipeline latency p50 | 638 µs | 9-stage pipeline incl. NavigationStage (5000 pkts, 1000 warmup) |
-| Pipeline latency p99 | 1483 µs | ±15% run-to-run on a shared laptop |
+| Pipeline latency p99 | 1483 µs | Warm runs ±8%; cold first run in a fresh clone ≈ 1954 µs |
 | Throughput | 1,580 pkts/s | tracemalloc off during timing |
 | RSS | 42.6 MB | Steady state |
 | CPU | 91% | Single core; **TO MEASURE on Pi 3B / Jetson Nano** |

@@ -162,8 +162,10 @@ Full threat catalogue: `firmware_attacks_threat_model.md` (F-001…F-012), `conf
   navigation stages aggregate over rolling windows: p50 ≈ 0.47 ms at
   500-warmup/1500-packets vs ≈ 0.64–0.68 ms at 1000-warmup/5000-packets. The
   figures above quote the deeper (pessimistic) configuration.
-- Run-to-run spread is ≈ ±5% on p50 and ±15% on p99 on a shared laptop. Single-run
-  figures should not be read as tight bounds.
+- Run-to-run spread is ≈ ±5% on p50 and ≈ ±8% on p99 across warm re-runs on this
+  host. A **cold first run** in a fresh clone measured p50 695 µs / p99 1954 µs
+  (~30% higher p99), so a reviewer's first run may exceed the table above; re-run
+  before drawing conclusions. Single-run figures should not be read as tight bounds.
 - The dominant per-packet cost is the **companion-integrity directory scan**
   (`os.path.isdir` on watched paths, ~3 filesystem probes per packet) plus the
   18-rule navigation fusion. See `docs/SYSTEM_LIMITS.md` for the planned fix.

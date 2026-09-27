@@ -143,7 +143,10 @@ Notes on how these were produced — please read before comparing:
   scan** (`os.path.isdir` on the watched paths) plus the 18-rule navigation
   fusion. Caching the scan on a timer is the obvious next optimisation and is
   listed in `docs/SYSTEM_LIMITS.md`.
-- Run-to-run spread is roughly ±5% on p50, ±15% on p99 on a shared laptop.
+- **Run-to-run spread:** warm re-runs on the dev host varied ~±5% on p50 and
+  ~±8% on p99. A **cold first run** in a fresh clone is worse — observed p50 695 µs
+  and p99 1954 µs, i.e. up to ~30% higher on p99. Re-run the command if your first
+  number looks worse than the table; that gap is warmup, not a regression.
 
 **On-target (Raspberry Pi 3B / Jetson Nano): TO MEASURE** — run the identical
 command there and commit the resulting CSV. Procedure in
