@@ -65,6 +65,8 @@ def make_parser() -> argparse.ArgumentParser:
                    help="Cycle attacks forever (Ctrl-C to stop)")
     p.add_argument("--run-all", action="store_true",
                    help="Run each attack once sequentially, then exit")
+    p.add_argument("--report", type=str, metavar="FILE",
+                   help="Save detailed detection report to FILE (JSON)")
     p.add_argument("--connect", type=str,
                    help="Live MAVLink connection string (e.g. udp:0.0.0.0:14550)")
     p.add_argument("--benign-ratio", type=float, default=0.3,
@@ -100,7 +102,8 @@ def run_live_capture(conn_str: str, pipe: IDSPipeline, rate: int, stop_event=Non
 
 
 def run_synthetic(pipe: IDSPipeline, attack_name: str | None,
-                  duration: float, rate: int, benign_ratio: float, loop: bool):
+                  duration: float, rate: int, benign_ratio: float, loop: bool,
+                  collect_report: bool = False):
     """Generate synthetic attacks and feed into pipeline."""
     import random
 
@@ -112,6 +115,8 @@ def run_synthetic(pipe: IDSPipeline, attack_name: str | None,
           f"{duration}s each, {rate} pkt/s, {benign_ratio:.0%} benign")
     print("Press Ctrl-C to stop.\n")
 
+    report_data = [] if collect_report else None
+
     try:
         while True:
             for gen, name in zip(generators, names):
@@ -119,11 +124,13 @@ def run_synthetic(pipe: IDSPipeline, attack_name: str | None,
                 print(f">>> ATTACK: {name.upper()} ({duration}s)")
                 print(f"{'='*60}")
 
-                start = time.time()
+                attack_start = time.time()
                 pkt_count = 0
                 alert_count = 0
+                first_detection_time = None
+                detections = [] if collect_report else None
 
-                while time.time() - start < duration:
+                while time.time() - attack_start < duration:
                     # Mix benign packets
                     if random.random() < benign_ratio:
                         frames = attacks.benign_stream(1)
@@ -136,19 +143,50 @@ def run_synthetic(pipe: IDSPipeline, attack_name: str | None,
                         if res:
                             alert_count += len(res)
                             for a in res:
-                                print(f"  [ALERT] {a.get('attack_class','?')}: {a.get('reason','?')} "
-                                      f"| severity={a.get('severity','?')} | layer={a.get('layer','?')}")
+                                attack_class = a.get('attack_class', '?')
+                                reason = a.get('reason', '?')
+                                severity = a.get('severity', '?')
+                                layer = a.get('layer', '?')
+                                print(f"  [ALERT] {attack_class}: {reason} "
+                                      f"| severity={severity} | layer={layer}")
+                                if collect_report:
+                                    elapsed = (time.time() - attack_start) * 1000  # ms
+                                    if first_detection_time is None:
+                                        first_detection_time = elapsed
+                                    detections.append({
+                                        "attack_class": attack_class,
+                                        "reason": reason,
+                                        "severity": severity,
+                                        "layer": layer,
+                                        "detection_time_ms": round(elapsed, 2)
+                                    })
 
                     if rate:
                         time.sleep(interval)
 
                 print(f"  Packets: {pkt_count} | Alerts fired: {alert_count}")
+                if first_detection_time is not None:
+                    print(f"  First detection: {first_detection_time:.1f} ms after attack start")
+
+                if collect_report:
+                    report_data.append({
+                        "attack_name": name,
+                        "duration_s": duration,
+                        "rate_pkt_s": rate,
+                        "benign_ratio": benign_ratio,
+                        "packets_sent": pkt_count,
+                        "alerts_fired": alert_count,
+                        "first_detection_ms": round(first_detection_time, 1) if first_detection_time else None,
+                        "detections": detections
+                    })
 
             if not loop:
                 break
 
     except KeyboardInterrupt:
         print("\n[Stopped by user]")
+
+    return report_data
 
 
 def main():
@@ -169,13 +207,29 @@ def main():
     if args.connect:
         run_live_capture(args.connect, pipe, args.rate)
     elif args.run_all:
-        run_synthetic(pipe, None, args.duration, args.rate,
-                      args.benign_ratio, loop=False)
+        report = run_synthetic(pipe, None, args.duration, args.rate,
+                               args.benign_ratio, loop=False,
+                               collect_report=args.report is not None)
+        if args.report and report:
+            write_report(args.report, report)
     else:
         run_synthetic(pipe, args.attack, args.duration, args.rate,
                       args.benign_ratio, args.loop)
 
     return 0
+
+
+def write_report(path: str, report_data: list):
+    """Write detailed detection report to JSON file."""
+    import json
+    summary = {
+        "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "total_attacks_tested": len(report_data),
+        "attacks": report_data
+    }
+    with open(path, "w") as f:
+        json.dump(summary, f, indent=2)
+    print(f"\n[REPORT] Detailed report saved to: {path}")
 
 
 if __name__ == "__main__":
